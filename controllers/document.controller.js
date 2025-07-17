@@ -295,19 +295,11 @@ const updateSample = async (req, res) => {
     }
 };
 
-const deleteSample = async (req, res) => {
+const deleteDocument = async (req, res) => {
     try {
-        const { docId, sampleIdx } = req.params;
-        const doc = await Document.findById(docId);
+        const { docId } = req.params;
+        const doc = await Document.findByIdAndDelete(docId);
         if (!doc) return res.status(404).json({ error: 'Document not found' });
-
-        const idx = parseInt(sampleIdx, 10);
-        if (isNaN(idx) || idx < 0 || idx >= doc.samples.length) {
-            return res.status(400).json({ error: 'Invalid sample index' });
-        }
-
-        doc.samples.splice(idx, 1);
-        await doc.save();
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -318,7 +310,7 @@ module.exports = {
     createDocument,
     getAllDocuments,
     sendData,
-    deleteSample,
+    deleteDocument,
     initTariffsForSamples,
     updateSample
 };

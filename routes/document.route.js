@@ -1,8 +1,8 @@
 const express = require('express');
-const { createDocument, getAllDocuments, deleteSample, updateSample, sendData } = require("../controllers/document.controller");
+const { createDocument, getAllDocuments, deleteDocument, updateSample, sendData } = require("../controllers/document.controller");
 const router = express.Router();
 
-router.delete('/:docId/samples/:sampleIdx', deleteSample);
+router.delete('/:docId', deleteDocument);
 router.post('/send-data', sendData);
 router.post('/create-document', createDocument);
 router.get('/get-all-documents', getAllDocuments);
