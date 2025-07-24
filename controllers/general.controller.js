@@ -23,6 +23,7 @@ const updateGeneral = async (req, res) => {
     res.json(general);
 };
 
+
 const initWayforpayPayment = async (req, res) => {
     const {
         email,
@@ -38,20 +39,19 @@ const initWayforpayPayment = async (req, res) => {
     const amount = parseFloat(totalValue).toFixed(2);
     const orderDate = Math.floor(Date.now() / 1000);
 
-    const productNames = [productName];
-    const productCounts = ['1'];
-    const productPrices = [amount];
+    const productCount = '1';
+    const productPrice = amount;
 
     const signatureSource = [
         merchantAccount,
         merchantDomainName,
         orderReference,
-        orderDate.toString(),
+        orderDate,
         amount,
         currency,
-        ...productNames,
-        ...productCounts,
-        ...productPrices
+        productName,
+        productCount,
+        productPrice
     ].join(';');
 
     const merchantSignature = crypto
@@ -59,16 +59,16 @@ const initWayforpayPayment = async (req, res) => {
         .update(signatureSource + merchantSecretKey)
         .digest('hex');
 
-    return res.status(200).json({
+    res.json({
         merchantAccount,
         merchantDomainName,
         orderReference,
         orderDate,
         amount,
         currency,
-        productName: productNames,
-        productCount: productCounts,
-        productPrice: productPrices,
+        productName: [productName],
+        productCount: [productCount],
+        productPrice: [productPrice],
         clientEmail: email,
         merchantSignature
     });
