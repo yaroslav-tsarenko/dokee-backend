@@ -29,13 +29,14 @@ const initWayforpayPayment = async (req, res) => {
         email,
         totalValue,
         productName = 'Document translation',
-        orderReference = 'ORD-' + Date.now()
+        orderReference = 'ORD-' + Date.now(),
+        currency = 'KZT'
     } = req.body;
 
     const merchantAccount = 'www_dokee_pro';
-    const merchantSecretKey = '43f8ec5981329304f616266597336518739b69c';
+    // ВАЖНО: Убедитесь, что этот секретный ключ ТОЧНО соответствует ключу,
+    const merchantSecretKey = '43f8ec5981329304f612662659733c518739b69c';
     const merchantDomainName = 'www.dokee.pro';
-    const currency = 'KZT';
     const amount = parseFloat(totalValue).toFixed(2);
     const orderDate = Math.floor(Date.now() / 1000);
 
@@ -48,7 +49,7 @@ const initWayforpayPayment = async (req, res) => {
         orderReference,
         orderDate,
         amount,
-        currency,
+        currency, // Используем валюту, полученную из запроса
         productName,
         productCount,
         productPrice
@@ -73,6 +74,7 @@ const initWayforpayPayment = async (req, res) => {
         merchantSignature
     });
 };
+
 
 
 export { getGeneral, updateGeneral, initWayforpayPayment };
