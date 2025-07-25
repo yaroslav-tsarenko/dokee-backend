@@ -2,6 +2,7 @@ const crypto = require('crypto');
 const axios = require('axios');
 
 const WAYFORPAY_SECRET_KEY = process.env.WAYFORPAY_SECRET_KEY;
+const merchantAccount = process.env.NEXT_PUBLIC_WAYFORPAY_MERCHANT_ACCOUNT;
 
 function generateSignature(fields) {
     const signatureFields = [
@@ -16,7 +17,6 @@ function generateSignature(fields) {
         'productPrice'
     ];
 
-    // Flatten arrays for productName, productCount, productPrice
     const values = signatureFields.map((key) => {
         const value = fields[key];
         if (Array.isArray(value)) {
@@ -73,33 +73,36 @@ exports.generateWayforpaySignature = (req, res) => {
     }
 };
 
+
 exports.checkWayforpayStatus = async (req, res) => {
-
-
-    const WAYFORPAY_SECRET_KEY = process.env.WAYFORPAY_SECRET_KEY;
-    const merchantAccount = process.env.NEXT_PUBLIC_WAYFORPAY_MERCHANT_ACCOUNT;
-
-    const { orderReference } = req.body;
-
-    const time = Math.floor(Date.now() / 1000);
-
-    const signatureString = `${merchantAccount};${orderReference};${time}`;
-    const signature = crypto.createHmac('md5', WAYFORPAY_SECRET_KEY).update(signatureString).digest('hex');
-
-    const payload = {
-        transactionType: "CHECK_STATUS",
-        merchantAccount,
-        orderReference,
-        merchantSignature: signature,
-        apiVersion: 1,
-        orderDate: time
-    };
-
     try {
+        const orderReference = req.params.order || req.body.orderReference;
+        if (!orderReference) {
+            return res.status(400).json({ error: "Missing orderReference" });
+        }
+
+        const orderDate = Math.floor(Date.now() / 1000);
+
+        const signatureString = `${merchantAccount};${orderReference};${orderDate}`;
+        const merchantSignature = crypto
+            .createHmac('md5', WAYFORPAY_SECRET_KEY)
+            .update(signatureString)
+            .digest('hex');
+
+        const payload = {
+            transactionType: "CHECK_STATUS",
+            apiVersion: 1,
+            merchantAccount,
+            orderReference,
+            orderDate,
+            merchantSignature
+        };
+
         const response = await axios.post("https://api.wayforpay.com/api", payload);
-        return res.json(response.data);
+        return res.status(200).json(response.data);
     } catch (err) {
-        console.error("WayForPay check status error", err?.response?.data || err);
-        return res.status(500).json({ error: "Failed to check status" });
+        console.error("WayForPay check status error:", err?.response?.data || err);
+        return res.status(500).json({ error: "Failed to check payment status" });
     }
 };
+
