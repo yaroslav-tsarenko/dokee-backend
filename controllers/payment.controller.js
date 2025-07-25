@@ -73,31 +73,32 @@ exports.generateWayforpaySignature = (req, res) => {
     }
 };
 
-
 exports.checkWayforpayStatus = async (req, res) => {
+    const { order, date } = req.params;
+
+    if (!order || !date) {
+        return res.status(400).json({ error: "Missing order reference or date" });
+    }
+
+    const orderReference = order;
+    const orderDate = parseInt(date, 10);
+
+    const signatureString = `${merchantAccount};${orderReference};${orderDate}`;
+    const merchantSignature = crypto
+        .createHmac('md5', WAYFORPAY_SECRET_KEY)
+        .update(signatureString)
+        .digest('hex');
+
+    const payload = {
+        transactionType: "CHECK_STATUS",
+        apiVersion: 1,
+        merchantAccount,
+        orderReference,
+        orderDate,
+        merchantSignature
+    };
+
     try {
-        const orderReference = req.params.order || req.body.orderReference;
-        if (!orderReference) {
-            return res.status(400).json({ error: "Missing orderReference" });
-        }
-
-        const orderDate = Math.floor(Date.now() / 1000);
-
-        const signatureString = `${merchantAccount};${orderReference};${orderDate}`;
-        const merchantSignature = crypto
-            .createHmac('md5', WAYFORPAY_SECRET_KEY)
-            .update(signatureString)
-            .digest('hex');
-
-        const payload = {
-            transactionType: "CHECK_STATUS",
-            apiVersion: 1,
-            merchantAccount,
-            orderReference,
-            orderDate,
-            merchantSignature
-        };
-
         const response = await axios.post("https://api.wayforpay.com/api", payload);
         return res.status(200).json(response.data);
     } catch (err) {
@@ -105,4 +106,5 @@ exports.checkWayforpayStatus = async (req, res) => {
         return res.status(500).json({ error: "Failed to check payment status" });
     }
 };
+
 
