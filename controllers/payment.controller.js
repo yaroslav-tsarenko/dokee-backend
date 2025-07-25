@@ -4,6 +4,45 @@ const axios = require('axios');
 const WAYFORPAY_SECRET_KEY = process.env.WAYFORPAY_SECRET_KEY;
 const merchantAccount = process.env.NEXT_PUBLIC_WAYFORPAY_MERCHANT_ACCOUNT;
 
+// Сигнатура для перевірки статусу
+function generateStatusSignature(merchantAccount, orderReference) {
+    const signatureString = `${merchantAccount};${orderReference}`;
+    return crypto
+        .createHmac('md5', WAYFORPAY_SECRET_KEY)
+        .update(signatureString)
+        .digest('hex');
+}
+
+exports.checkWayforpayStatus = async (req, res) => {
+    try {
+        const { orderReference } = req.body;
+
+        if (!orderReference) {
+            return res.status(400).json({ error: 'Missing orderReference' });
+        }
+
+        const signature = generateStatusSignature(merchantAccount, orderReference);
+
+        const response = await axios.post('https://api.wayforpay.com/api', {
+            apiVersion: 1,
+            transactionType: 'CHECK_STATUS',
+            merchantAccount,
+            orderReference,
+            merchantSignature: signature
+        }, {
+            headers: {
+                'Content-Type': 'application/json'
+            }
+        });
+
+        return res.json(response.data);
+    } catch (error) {
+        console.error('WayForPay status check error:', error?.response?.data || error.message);
+        return res.status(500).json({ error: 'Failed to check payment status' });
+    }
+};
+
+// Існуюча функція генерації підпису для оплати
 function generateSignature(fields) {
     const signatureFields = [
         'merchantAccount',
@@ -26,10 +65,9 @@ function generateSignature(fields) {
     });
 
     const signatureString = values.join(';');
-    const hash = crypto.createHmac('md5', WAYFORPAY_SECRET_KEY)
+    return crypto.createHmac('md5', WAYFORPAY_SECRET_KEY)
         .update(signatureString)
         .digest('hex');
-    return hash;
 }
 
 exports.generateWayforpaySignature = (req, res) => {
@@ -72,39 +110,3 @@ exports.generateWayforpaySignature = (req, res) => {
         return res.status(500).json({ error: 'Internal server error' });
     }
 };
-
-exports.checkWayforpayStatus = async (req, res) => {
-    const { order, date } = req.params;
-
-    if (!order || !date) {
-        return res.status(400).json({ error: "Missing order reference or date" });
-    }
-
-    const orderReference = order;
-    const orderDate = parseInt(date, 10);
-
-    const signatureString = `${merchantAccount};${orderReference};${orderDate}`;
-    const merchantSignature = crypto
-        .createHmac('md5', WAYFORPAY_SECRET_KEY)
-        .update(signatureString)
-        .digest('hex');
-
-    const payload = {
-        transactionType: "CHECK_STATUS",
-        apiVersion: 1,
-        merchantAccount,
-        orderReference,
-        orderDate,
-        merchantSignature
-    };
-
-    try {
-        const response = await axios.post("https://api.wayforpay.com/api", payload);
-        return res.status(200).json(response.data);
-    } catch (err) {
-        console.error("WayForPay check status error:", err?.response?.data || err);
-        return res.status(500).json({ error: "Failed to check payment status" });
-    }
-};
-
-

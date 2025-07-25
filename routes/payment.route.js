@@ -7,6 +7,6 @@ const {
 } = require('../controllers/payment.controller');
 
 router.post('/generate-wayforpay-signature', generateWayforpaySignature);
-router.get('/check-wayforpay-status/:order/:date', checkWayforpayStatus);
+router.post('/check-wayforpay-status', checkWayforpayStatus);
 
 module.exports = router;
