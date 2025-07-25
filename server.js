@@ -7,6 +7,7 @@ import ora from 'ora';
 import chalk from 'chalk';
 import documentRoutes from './routes/document.route.js';
 import generalRoutes from './routes/general.route.js';
+import paymentRoutes from './routes/payment.route.js';
 
 const app = express();
 app.use(cors({
@@ -23,6 +24,7 @@ mongoose.connect(process.env.MONGODB_URI)
         const PORT = process.env.PORT || 5000;
         app.use('/documents', documentRoutes);
         app.use('/general-settings', generalRoutes);
+        app.use('/payment', paymentRoutes);
         app.listen(PORT, () => {
             console.log(chalk.cyan.bold(`🚀 Server running on port ${PORT}`));
         });

@@ -20,6 +20,7 @@
     "nodemailer": "^7.0.5",
     "nodemon": "^3.1.10",
     "ora": "^8.2.0",
-    "pug": "2.0.0-beta11"
+    "pug": "2.0.0-beta11",
+    "wayforpay-ts-integration": "^0.1.11"
   }
 }
