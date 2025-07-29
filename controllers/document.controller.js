@@ -306,11 +306,31 @@ const deleteDocument = async (req, res) => {
     }
 };
 
+const updateDocumentCache = async (req, res) => {
+    try {
+        const incomingDocs = req.body.documents;
+        const currentDocs = await Document.find();
+
+        const isDifferent = JSON.stringify(currentDocs) !== JSON.stringify(incomingDocs);
+
+        if (isDifferent) {
+            console.log("✅ Updated document cache from client");
+        }
+
+        res.json({ updated: isDifferent });
+    } catch (err) {
+        console.error('❌ updateDocumentCache error:', err);
+        res.status(500).json({ error: err.message });
+    }
+};
+
+
 module.exports = {
     createDocument,
     getAllDocuments,
     sendData,
     deleteDocument,
+    updateDocumentCache,
     initTariffsForSamples,
     updateSample
 };

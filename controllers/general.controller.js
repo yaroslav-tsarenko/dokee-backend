@@ -75,6 +75,21 @@ const initWayforpayPayment = async (req, res) => {
     });
 };
 
+const updateGeneralCache = async (req, res) => {
+    try {
+        const incomingGeneral = req.body.general;
+        const current = await General.findOne();
 
+        if (!current || JSON.stringify(current.toObject()) !== JSON.stringify(incomingGeneral)) {
+            await General.findOneAndUpdate({}, incomingGeneral, { upsert: true });
+            console.log("✅ Updated general cache from client");
+        }
 
-export { getGeneral, updateGeneral, initWayforpayPayment };
+        res.json({ success: true });
+    } catch (err) {
+        console.error('❌ updateGeneralCache error:', err);
+        res.status(500).json({ error: err.message });
+    }
+};
+
+export { getGeneral, updateGeneral, initWayforpayPayment, updateGeneralCache };
