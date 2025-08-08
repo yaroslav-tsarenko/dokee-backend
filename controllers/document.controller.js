@@ -343,7 +343,7 @@ const newRequest = async (req, res) => {
                       <p>Документ прикреплённый ниже</p>`;
 
         await sendEmail(
-            "yaroslav7v@gmail.com",
+            "dokee.pro@gmail.com",
             "Предложение на перевод документа",
             "",
             files.length ? files : undefined,
