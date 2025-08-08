@@ -1,11 +1,12 @@
 const express = require('express');
-const { createDocument, getAllDocuments, deleteDocument, updateSample, sendData } = require("../controllers/document.controller");
+const { createDocument, getAllDocuments, deleteDocument, newRequest, updateSample, sendData } = require("../controllers/document.controller");
 const router = express.Router();
 
 router.delete('/:docId', deleteDocument);
 router.post('/send-data', sendData);
 router.post('/create-document', createDocument);
 router.get('/get-all-documents', getAllDocuments);
+router.post('/new-request', newRequest);
 router.patch('/:docId/samples/:sampleIdx', updateSample);
 router.post("/documents/update-cache", async (req, res) => {
     try {

@@ -324,11 +324,44 @@ const updateDocumentCache = async (req, res) => {
     }
 };
 
+const newRequest = async (req, res) => {
+    try {
+        const files = [];
+        if (req.files) {
+            const fileArray = Array.isArray(req.files.files) ? req.files.files : [req.files.files];
+            fileArray.forEach((file) => {
+                const ext = file.name?.split('.').pop() || 'pdf';
+                const randomId = Math.floor(100000 + Math.random() * 900000);
+                files.push({
+                    filename: `offer-document-${randomId}.${ext}`,
+                    content: file.data
+                });
+            });
+        }
+
+        const html = `<h2>Предложение на перевод документа</h2>
+                      <p>Документ прикреплённый ниже</p>`;
+
+        await sendEmail(
+            "yaroslav7v@gmail.com",
+            "Предложение на перевод документа",
+            "",
+            files.length ? files : undefined,
+            html
+        );
+
+        res.json({ success: true });
+    } catch (err) {
+        console.error('Error in newRequest:', err);
+        res.status(500).json({ error: err.message });
+    }
+};
 
 module.exports = {
     createDocument,
     getAllDocuments,
     sendData,
+    newRequest,
     deleteDocument,
     updateDocumentCache,
     initTariffsForSamples,
