@@ -134,95 +134,74 @@ const initTariffsForSamples = async () => {
     }
 };
 
+const lang = (v) => (v || "").toString().trim();
 
 const sendData = async (req, res) => {
     try {
-        const { email, languagePair, tariff, totalValue, selectedDate } = req.body;
+        const email        = lang(req.body.email) || "dokee.pro@gmail.com";
+        const languagePair = lang(req.body.languagePair);
+        const tariff       = lang(req.body.tariff);
+        const totalValue   = String(req.body.totalValue ?? "");
+
+        let selectedDate = lang(req.body.selectedDate) || "";
         let samples = req.body.samples;
-        if (typeof samples === 'string') samples = JSON.parse(samples);
-
-        const tariffKey = tariff ? tariff.toLowerCase() : 'normal';
-
-        let slotField = '';
-        if (tariffKey === 'normal') slotField = 'normalSlots';
-        else if (tariffKey === 'express') slotField = 'expressSlots';
-        else if (tariffKey === 'fast') slotField = 'fastSlots';
-
-        if (slotField) {
-            await General.findOneAndUpdate({}, { $inc: { [slotField]: -1 } });
-        }
-
-        let toLang = '';
-        if (languagePair) {
-            const parts = languagePair.split('-');
-            toLang = parts[1] ? parts[1].trim().toLowerCase() : '';
-            toLang = langMap[toLang] || toLang;
-        }
+        if (typeof samples === "string") { try { samples = JSON.parse(samples); } catch { samples = []; } }
+        if (!Array.isArray(samples)) samples = [];
 
         let html = `<h2>Новая заявка на перевод</h2>
-        <p><b>Языковая пара:</b> ${languagePair}</p>
-        <p><b>Тариф:</b> ${tariff}</p>
-        <p><b>Общая стоимость:</b> ${totalValue} ₸</p>`;
-        if (selectedDate) {
-            html += `<p><b>Выбранная дата:</b> ${selectedDate}</p>`;
-        }
+<p><b>Языковая пара:</b> ${languagePair || "-"}</p>
+<p><b>Тариф:</b> ${tariff || "-"}</p>
+<p><b>Общая стоимость:</b> ${totalValue ? totalValue + " ₸" : "-"}</p>`;
+        if (selectedDate) html += `<p><b>Выбранная дата:</b> ${selectedDate}</p>`;
         html += `<hr/>`;
 
-        for (const sample of samples) {
-            const doc = await Document.findOne({ name: sample.docName });
-            let dbSample = null;
-            let price = 0;
-            if (doc) {
-                dbSample = doc.samples.find(s => s.title === sample.sampleTitle);
-                const tariffs = dbSample?.languageTariffs || doc.languageTariffs || [];
-                const langTariff = tariffs.find(t => {
-                    if (!t.language) return false;
-                    const lang = t.language.toLowerCase();
-                    if (lang.includes('_') || lang.includes('-')) {
-                        return lang.split(/[_\s-]+/).includes(toLang);
-                    }
-                    return lang === toLang;
-                });
-                price = langTariff ? langTariff[tariffKey] || 0 : 0;
-            }
-
-            const baseName = sample.docName.replace(/\s*\(.*?\)/, '');
-            const fullName = `${baseName}${sample.sampleTitle ? ` (${sample.sampleTitle})` : ''}`;
+        for (const s of samples) {
+            const baseName = (s?.docName || "").replace(/\s*\(.*?\)/, "");
+            const fullName = `${baseName}${s?.sampleTitle ? ` (${s.sampleTitle})` : ""}`;
+            const price    = s?.computedPrice || 0;
 
             html += `
-                <h3>${baseName}</h3>
-                <b>Документ</b>: ${fullName}<br/>
-                <b>Языковая пара</b>: ${languagePair}<br/>
-                <b>Тариф</b>: ${tariff}<br/>
-                <b>Стоимость</b>: ${price}₸<br/>
-                <b>ФИО латиницей</b>: ${sample.fioLatin || '-'}<br/>
-                <b>Печать</b>: ${sample.sealText || '-'}<br/>
-                <b>Штамп</b>: ${sample.stampText || '-'}<br/>
-                <hr/>
-            `;
+<h3>${baseName || "Документ"}</h3>
+<b>Документ</b>: ${fullName || "-"}<br/>
+<b>Языковая пара</b>: ${languagePair || "-"}<br/>
+<b>Тариф</b>: ${tariff || "-"}<br/>
+<b>Стоимость</b>: ${price}₸<br/>
+<b>ФИО латиницей</b>: ${s?.fioLatin || "-"}<br/>
+<b>Печать</b>: ${s?.sealText || "-"}<br/>
+<b>Штамп</b>: ${s?.stampText || "-"}<br/>
+<hr/>`;
         }
 
-        const files = [];
-        if (req.files) {
-            const fileArray = Array.isArray(req.files.files) ? req.files.files : [req.files.files];
-            fileArray.forEach((file) => {
-                const ext = file.name?.split('.').pop() || 'pdf';
-                const randomId = Math.floor(100000 + Math.random() * 900000);
-                files.push({
-                    filename: `dokee-${randomId}.${ext}`,
-                    content: file.data
-                });
+        const attachments = [];
+        if (req.files && Object.keys(req.files).length) {
+            const normalize = v => (Array.isArray(v) ? v : v ? [v] : []);
+            const bag = req.files;
+            let all = [
+                ...normalize(bag.files),
+                ...normalize(bag["files[]"]),
+                ...Object.keys(bag).filter(k => k!=="files" && k!=="files[]").flatMap(k => normalize(bag[k])),
+            ];
+            all.filter(Boolean).forEach((file, idx) => {
+                if (!file || typeof file !== "object") return;
+                const safe = (typeof file.name === "string" && file.name.trim()) ? file.name.trim() : `upload-${Date.now()}-${idx}`;
+                const extByName = safe.includes(".") ? safe.split(".").pop() : "";
+                const extByMime = (typeof file.mimetype==="string" && file.mimetype.includes("/")) ? file.mimetype.split("/").pop() : "";
+                const ext = String(extByName || extByMime || "bin").toLowerCase();
+                const filename = extByName ? safe : `${safe}.${ext}`;
+                const content = file.data || file.buffer;
+                if (!content) return;
+                attachments.push({ filename, content });
             });
         }
 
-        await sendEmail(email, 'Новая заявка на перевод', '', files.length ? files : undefined, html);
-
-        res.json({ success: true });
+        await sendEmail(email, "Новая заявка на перевод", "", attachments.length ? attachments : undefined, html);
+        return res.json({ success: true, filesAttached: attachments.length });
     } catch (err) {
-        console.error('Error in sendData:', err);
-        res.status(500).json({ error: err.message });
+        console.error("Error in sendData:", err);
+        return res.status(500).json({ error: err?.message || "Server error" });
     }
 };
+
 
 const initRussianTariffForUaSamples = async () => {
     try {
