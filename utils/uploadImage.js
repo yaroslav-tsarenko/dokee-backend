@@ -12,11 +12,16 @@ const s3 = new AWS.S3({
 const uploadImage = async (file, fileName) => {
     if (!file) throw new Error("Файл отсутствует");
 
+    const buffer = file.buffer || file.data;
+    const mimetype = file.mimetype || file.type || 'application/octet-stream';
+
+    if (!buffer) throw new Error("File buffer/data is missing");
+
     const params = {
         Bucket: "images",
         Key: fileName,
-        Body: file.data,
-        ContentType: file.mimetype || 'application/octet-stream',
+        Body: buffer,
+        ContentType: mimetype,
         ACL: 'public-read',
     };
 

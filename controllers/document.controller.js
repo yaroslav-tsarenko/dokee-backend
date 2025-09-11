@@ -233,18 +233,26 @@ const initRussianTariffForUaSamples = async () => {
 
 const updateSample = async (req, res) => {
     try {
+        console.log('--- updateSample called ---');
+        console.log('req.params:', req.params);
+        console.log('req.body:', req.body);
+        console.log('req.file:', req.file); // <-- multer puts the file here
+
         const { docId, sampleIdx } = req.params;
         const doc = await Document.findById(docId);
-        if (!doc) return res.status(404).json({ error: 'Document not found' });
+        if (!doc) {
+            console.error('Document not found');
+            return res.status(404).json({ error: 'Document not found' });
+        }
 
         const sampleIndex = parseInt(sampleIdx, 10);
         if (isNaN(sampleIndex) || sampleIndex < 0 || sampleIndex >= doc.samples.length) {
+            console.error('Invalid sample index');
             return res.status(400).json({ error: 'Invalid sample index' });
         }
 
         const sample = doc.samples[sampleIndex];
 
-        // Обновление текста
         const { title, languageTariffs, removeImage } = req.body;
         if (title !== undefined) sample.title = title;
         if (languageTariffs !== undefined) {
@@ -253,20 +261,29 @@ const updateSample = async (req, res) => {
                 : JSON.parse(languageTariffs);
         }
 
-        // Замена изображения
-        if (req.files && req.files.image) {
-            const ext = req.files.image.name ? req.files.image.name.split('.').pop() : 'jpg';
-            const fileName = `document-sample-${docId}-${sampleIndex}.${ext}`;
-            const imageUrl = await uploadImage(req.files.image, fileName);
-            sample.imageUrl = imageUrl;
+        // Use req.file for multer
+        if (req.file) {
+            console.log('Uploading image to R2...');
+            const ext = req.file.originalname ? req.file.originalname.split('.').pop() : 'jpg';
+            const uniqueSuffix = `${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
+            const fileName = `document-sample-${docId}-${sampleIndex}-${uniqueSuffix}.${ext}`;
+            try {
+                const imageUrl = await uploadImage(req.file, fileName); // Should upload to R2
+                console.log('Image uploaded to R2:', imageUrl);
+                sample.imageUrl = imageUrl;
+            } catch (uploadErr) {
+                console.error('Image upload error:', uploadErr);
+                return res.status(500).json({ error: 'Image upload failed' });
+            }
         }
 
-        // Удаление изображения
         if (removeImage === 'true') {
+            console.log('Removing image from sample');
             sample.imageUrl = '';
         }
 
         await doc.save();
+        console.log('Sample updated:', sample);
         res.json(sample);
     } catch (err) {
         console.error('updateSample error:', err);

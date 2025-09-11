@@ -14,7 +14,7 @@ const app = express();
 
 app.use(cors({ origin: true, credentials: true }));
 app.use(express.json());
-app.use(express.urlencoded({ extended: true })); // ок для текстових полів (multipart поля читає multer)
+app.use(express.urlencoded({ extended: true }));
 
 const spinner = ora('Connecting to MongoDB...').start();
 
