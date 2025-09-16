@@ -8,7 +8,7 @@ router.delete('/:docId', deleteDocument);
 router.post('/send-data', sendData);
 router.post('/create-document', upload.any(), createDocument);
 router.get('/get-all-documents', getAllDocuments);
-router.post('/new-request', newRequest);
+router.post('/new-request', upload.any(), newRequest);
 router.patch('/:docId/samples/:sampleIdx', upload.single('image'), updateSample);
 router.post("/documents/update-cache", async (req, res) => {
     try {
