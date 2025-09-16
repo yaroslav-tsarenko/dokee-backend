@@ -322,15 +322,15 @@ const updateDocumentCache = async (req, res) => {
 
 const newRequest = async (req, res) => {
     try {
+        // Multer puts files in req.files as an array when using .any()
         const files = [];
-        if (req.files) {
-            const fileArray = Array.isArray(req.files.files) ? req.files.files : [req.files.files];
-            fileArray.forEach((file) => {
-                const ext = file.name?.split('.').pop() || 'pdf';
-                const randomId = Math.floor(100000 + Math.random() * 900000);
+        if (req.files && Array.isArray(req.files)) {
+            req.files.forEach((file, idx) => {
+                if (!file || !file.buffer) return;
+                const ext = file.originalname?.split('.').pop() || 'pdf';
                 files.push({
-                    filename: `offer-document-${randomId}.${ext}`,
-                    content: file.data
+                    filename: `offer-document-${Date.now()}-${idx}.${ext}`,
+                    content: file.buffer
                 });
             });
         }
