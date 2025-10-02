@@ -244,13 +244,14 @@ async function sendOrderEmail(order) {
     }
 
     await sendEmail(
-        "yaroslav7v@gmail.com",
+        "dokee.pro@gmail.com",
         "Нова заявка на переклад",
         "",
         attachments.length ? attachments : undefined,
         html
     );
 }
+
 
 
 
