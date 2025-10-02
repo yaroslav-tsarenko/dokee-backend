@@ -10,9 +10,8 @@ const FormData = require('form-data');
 
 const WAYFORPAY_SECRET_KEY = process.env.WAYFORPAY_SECRET_KEY;
 const merchantAccount = process.env.NEXT_PUBLIC_WAYFORPAY_MERCHANT_ACCOUNT;
-const TELEGRAM_BOT_TOKEN = '8171381275:AAH150hTsYri0oX5nmg6Rm_0vYUcojB-g3o';
-const TELEGRAM_CHANNEL_ID = '-1003173238659';
-
+const TELEGRAM_BOT_TOKEN = process.env.BOT_TOKEN;
+const TELEGRAM_CHANNEL_ID = process.env.CHANNEL_ID;
 
 // controllers/payment.controller.js
 
