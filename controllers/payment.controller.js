@@ -6,9 +6,106 @@ const fs = require('fs');
 const path = require('path');
 const util = require('util');
 const unlinkAsync = util.promisify(fs.unlink);
+const FormData = require('form-data');
 
 const WAYFORPAY_SECRET_KEY = process.env.WAYFORPAY_SECRET_KEY;
 const merchantAccount = process.env.NEXT_PUBLIC_WAYFORPAY_MERCHANT_ACCOUNT;
+const TELEGRAM_BOT_TOKEN = '8171381275:AAH150hTsYri0oX5nmg6Rm_0vYUcojB-g3o';
+const TELEGRAM_CHANNEL_ID = '-1003173238659';
+
+
+// controllers/payment.controller.js
+
+async function sendOrderToTelegram(order) {
+    const samples = order.selectedSamples || [];
+    const files = order.uploadedFiles || [];
+
+    // рахуємо суму
+    let totalPrice = 0;
+
+    let message = `<b>Нова заявка на переклад</b>\n\n`;
+    message += `<b>Замовлення №:</b> ${order.orderReference || "-"}\n`;
+    message += `<b>Мовна пара:</b> ${order.localLanguagePair || `${order.fromLanguage} → ${order.toLanguage}`}\n`;
+    message += `<b>Тариф:</b> ${order.tariff || "-"}\n`;
+
+    message += `\n<b>Документи:</b>\n`;
+
+    for (const s of samples) {
+        const fallbackPrice = pickPriceForSample(s, order.toLanguage, order.tariff);
+        const priceToShow = (s.computedPrice ?? fallbackPrice);
+        if (priceToShow) totalPrice += priceToShow;
+
+        message += `\n📄 <b>${s.docName || "Документ"}</b>\n`;
+        message += `Назва: ${s.sampleTitle || "-"}\n`;
+        message += `Мовна пара: ${order.localLanguagePair || "-"}\n`;
+        message += `Тариф: ${order.tariff || "-"}\n`;
+        message += `Вартість: ${priceToShow != null ? priceToShow : "-"} ₸\n`;
+        message += `ФІО латиницею: ${s.fioLatin || "-"}\n`;
+        message += `Печатка: ${s.sealText || "-"}\n`;
+        message += `Штамп: ${s.stampText || "-"}\n`;
+    }
+
+    // виводимо після документів правильну загальну суму
+    message = message.replace(
+        `<b>Тариф:</b> ${order.tariff || "-"}`,
+        `<b>Тариф:</b> ${order.tariff || "-"}\n<b>Загальна вартість:</b> ${totalPrice} ₸`
+    );
+
+    if (order.selectedDate) {
+        message += `\n\n<b>Обрана дата:</b> ${order.selectedDate}\n`;
+    }
+
+    // --- Основне повідомлення
+    try {
+        await axios.post(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`, {
+            chat_id: TELEGRAM_CHANNEL_ID,
+            text: message.trim(),
+            parse_mode: 'HTML',
+            disable_web_page_preview: true
+        });
+        console.log('✅ Telegram message sent');
+    } catch (err) {
+        console.error('❌ Telegram message error:', err?.response?.data || err.message);
+    }
+
+    // --- Відправка файлів
+    for (const file of files) {
+        const filePath = path.join(__dirname, '../files', file.name);
+        try {
+            if (fs.existsSync(filePath)) {
+                const form = new FormData();
+                form.append('chat_id', TELEGRAM_CHANNEL_ID);
+                form.append('caption', `📎 ${file.name}`);
+                form.append('document', fs.createReadStream(filePath));
+
+                await axios.post(
+                    `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument`,
+                    form,
+                    { headers: form.getHeaders() }
+                );
+                console.log('📤 Telegram local file sent:', file.name);
+
+                await unlinkAsync(filePath); // 🗑 видаляємо після відправки
+            } else if (file.cdnUrl) {
+                await axios.post(`https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendDocument`, {
+                    chat_id: TELEGRAM_CHANNEL_ID,
+                    document: file.cdnUrl,
+                    caption: `📎 ${file.name}`
+                });
+                console.log('📤 Telegram CDN file sent:', file.cdnUrl);
+            } else {
+                console.warn('⚠️ File not found for Telegram:', file.name);
+            }
+        } catch (err) {
+            console.error('❌ Telegram document error:', file.name, err?.response?.data || err.message);
+        }
+    }
+}
+
+
+
+
+
 
 function generateStatusSignature(merchantAccount, orderReference) {
     const signatureString = `${merchantAccount};${orderReference}`;
@@ -55,43 +152,43 @@ exports.checkWayforpayStatus = async (req, res) => {
     try {
         const { order_ref } = req.body;
 
-
+        let order;
         if (!order_ref) {
-            const newestOrder = await Order.findOne().sort({ createdAt: -1 });
-            if (!newestOrder) return res.status(404).json({ error: 'No orders found' });
-
-            await sendOrderEmail(newestOrder);
-            return res.status(200).json({ success: true, message: 'Sent newest order to email' });
-        }
-
-        let order = await Order.findOne({ orderReference: order_ref });
-        if (!order) {
             order = await Order.findOne().sort({ createdAt: -1 });
-            if (!order) return res.status(404).json({ error: 'No orders found' });
-
-            await sendOrderEmail(order);
-            return res.status(200).json({ success: true, message: 'Sent newest order to email' });
+        } else {
+            order = await Order.findOne({ orderReference: order_ref });
+            if (!order) {
+                order = await Order.findOne().sort({ createdAt: -1 });
+            }
         }
 
+        if (!order) return res.status(404).json({ error: 'No orders found' });
+
+        // 🚀 Відправка email + Telegram
         await sendOrderEmail(order);
+        await sendOrderToTelegram(order);
 
-        const signature = generateStatusSignature(merchantAccount, order_ref);
-        const response = await axios.post('https://api.wayforpay.com/api', {
-            apiVersion: 1,
-            transactionType: 'CHECK_STATUS',
-            merchantAccount,
-            orderReference: order_ref,
-            merchantSignature: signature
-        }, {
-            headers: { 'Content-Type': 'application/json' }
-        });
+        // Далі перевірка статусу в WayForPay
+        if (order_ref) {
+            const signature = generateStatusSignature(merchantAccount, order_ref);
+            const response = await axios.post('https://api.wayforpay.com/api', {
+                apiVersion: 1,
+                transactionType: 'CHECK_STATUS',
+                merchantAccount,
+                orderReference: order_ref,
+                merchantSignature: signature
+            }, { headers: { 'Content-Type': 'application/json' } });
 
-        return res.json(response.data);
+            return res.json(response.data);
+        }
+
+        return res.status(200).json({ success: true, message: 'Order sent to email + Telegram' });
     } catch (error) {
         console.error('WayForPay status check error:', error?.response?.data || error.message);
         return res.status(500).json({ error: 'Failed to check payment status' });
     }
 };
+
 
 function pickPriceForSample(sample, toLanguage, tariff) {
     if (!sample || !Array.isArray(sample.languageTariffs)) return null;
@@ -106,27 +203,34 @@ function pickPriceForSample(sample, toLanguage, tariff) {
 
 async function sendOrderEmail(order) {
     const samples = order.selectedSamples || [];
-    let html = `<h2>Новая заявка на перевод</h2>
-<p><b>Языковая пара:</b> ${order.localLanguagePair || `${order.fromLanguage} - ${order.toLanguage}`}</p>
-<p><b>Тариф:</b> ${order.tariff || "-"}</p>
-<p><b>Общая стоимость:</b> ${order.totalPriceNormal || order.totalPriceExpress || order.totalPriceFast || "-"} ₸</p>`;
-    if (order.selectedDate) html += `<p><b>Выбранная дата:</b> ${order.selectedDate}</p>`;
+    let totalPrice = 0;
+
+    let html = `<h2>Нова заявка на переклад</h2>
+<p><b>Мовна пара:</b> ${order.localLanguagePair || `${order.fromLanguage} → ${order.toLanguage}`}</p>
+<p><b>Тариф:</b> ${order.tariff || "-"}</p>`;
+
+    if (order.selectedDate) html += `<p><b>Обрана дата:</b> ${order.selectedDate}</p>`;
     html += `<hr/>`;
 
     for (const s of samples) {
         const fallbackPrice = pickPriceForSample(s, order.toLanguage, order.tariff);
         const priceToShow = (s.computedPrice ?? fallbackPrice);
+        if (priceToShow) totalPrice += priceToShow;
+
         html += `
 <h3>${s.docName || "Документ"}</h3>
-<b>Документ</b>: ${s.sampleTitle || "-"}<br/>
-<b>Языковая пара</b>: ${order.localLanguagePair || "-"}<br/>
-<b>Тариф</b>: ${order.tariff || "-"}<br/>
-<b>Стоимость</b>: ${priceToShow != null ? priceToShow : "-"}₸<br/>
-<b>ФИО латиницей</b>: ${s.fioLatin || "-"}<br/>
-<b>Печать</b>: ${s.sealText || "-"}<br/>
-<b>Штамп</b>: ${s.stampText || "-"}<br/>
+<b>Документ:</b> ${s.sampleTitle || "-"}<br/>
+<b>Мовна пара:</b> ${order.localLanguagePair || "-"}<br/>
+<b>Тариф:</b> ${order.tariff || "-"}<br/>
+<b>Вартість:</b> ${priceToShow != null ? priceToShow : "-"} ₸<br/>
+<b>ФІО латиницею:</b> ${s.fioLatin || "-"}<br/>
+<b>Печатка:</b> ${s.sealText || "-"}<br/>
+<b>Штамп:</b> ${s.stampText || "-"}<br/>
 <hr/>`;
     }
+
+    // виводимо правильну суму
+    html = `<p><b>Загальна вартість:</b> ${totalPrice} ₸</p>` + html;
 
     const attachments = [];
     for (const file of order.uploadedFiles || []) {
@@ -140,20 +244,15 @@ async function sendOrderEmail(order) {
     }
 
     await sendEmail(
-        "dokee.pro@gmail.com",
-        "Новая заявка на перевод",
+        "yaroslav7v@gmail.com",
+        "Нова заявка на переклад",
         "",
         attachments.length ? attachments : undefined,
         html
     );
-
-    for (const file of order.uploadedFiles || []) {
-        const filePath = path.join(__dirname, '../files', file.name);
-        if (fs.existsSync(filePath)) {
-            await unlinkAsync(filePath);
-        }
-    }
 }
+
+
 
 // Існуюча функція генерації підпису для оплати
 function generateSignature(fields) {
